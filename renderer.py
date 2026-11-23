@@ -1,373 +1,476 @@
 #!/usr/bin/env python3
-"""Rich-art renderer for news-image-20261123 slot-1 page.
-Fresh PIL renderer: cream broadsheet, giant date, 11 cards each with a
-layered-gradient, grain-textured illustrated panel and a drawn scene.
-Deterministic: all texture comes from fixed-seed numpy RandomState or
-pure maths, so repeated runs are byte-identical.
+"""Slot-2 candidate renderer - news-image-20261123 (Monday 23 November 2026).
+
+Fresh-authored composing lane. Cream broadsheet, giant date, 13 rich-art
+headlined cards, numbered briefs band, DATE CHECK box. Deterministic:
+all grain uses fixed numpy RandomState seeds; repeated runs are
+byte-identical.
 """
-import json, math, os
+import json
+import math
+import os
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-W, H = 1024, 1024
-CREAM_TOP = (248, 243, 233)
-CREAM_BOT = (242, 233, 208)
-INK = (24, 22, 18)
-RED = (178, 28, 32)
-NAVY = (18, 42, 84)
-CARD_BG = (252, 249, 240)
-CARD_LINE = (146, 132, 104)
+W = H = 1024
+M = 16
+CW = W - 2 * M  # 992 content width
 
-FDIR = "/usr/share/fonts/truetype/noto/"
-SERIF_CB = FDIR + "NotoSerif-CondensedBold.ttf"
-COND_B = FDIR + "NotoSans-CondensedBold.ttf"
-COND = FDIR + "NotoSans-Condensed.ttf"
-EXTRA_B = FDIR + "NotoSans-ExtraCondensedBold.ttf"
+NOTO = "/usr/share/fonts/truetype/noto/"
+F_DATE = NOTO + "NotoSans-ExtraCondensedBlack.ttf"
+F_XCB = NOTO + "NotoSans-ExtraCondensedBlack.ttf"
+F_CB = NOTO + "NotoSans-CondensedBold.ttf"
+F_C = NOTO + "NotoSans-Condensed.ttf"
+F_B = NOTO + "NotoSans-Bold.ttf"
+
+CREAM = (252, 249, 240)
+INK = (18, 16, 12)
+RED = (178, 24, 20)
+NAVY = (16, 28, 52)
+
+_cache = {}
+
 
 def font(path, size):
-    return ImageFont.truetype(path, size)
+    key = (path, size)
+    if key not in _cache:
+        _cache[key] = ImageFont.truetype(path, size)
+    return _cache[key]
 
-def wrap(text, fnt, maxw):
-    words, lines, cur = text.split(), [], ""
-    for wd in words:
-        t = (cur + " " + wd).strip()
-        if fnt.getlength(t) <= maxw or not cur:
+
+def tw(draw, text, fnt):
+    return draw.textlength(text, font=fnt)
+
+
+def wrap(draw, text, fnt, maxw, maxlines):
+    words = text.split()
+    lines, cur = [], ""
+    for w_ in words:
+        t = (cur + " " + w_).strip()
+        if tw(draw, t, fnt) <= maxw or not cur:
             cur = t
         else:
-            lines.append(cur); cur = wd
+            lines.append(cur)
+            cur = w_
     if cur:
         lines.append(cur)
+    assert len(lines) <= maxlines, f"wrap overflow ({len(lines)}>{maxlines}): {text}"
     return lines
 
-def fit_lines(text, maxw, size, max_lines=2):
-    """Try condensed bold, then extra-condensed bold, at the given size."""
-    for path in (COND_B, EXTRA_B):
-        f = font(path, size)
-        ls = wrap(text, f, maxw)
-        if len(ls) <= max_lines:
-            return f, ls
-    f = font(EXTRA_B, size)
-    return f, wrap(text, f, maxw)
 
-# ---------- rich gradient panel base ----------
-def gradient_panel(w, h, c_top, c_mid, c_bot, seed, grain=13):
+def wrap_balanced(draw, text, fnt, maxw, maxlines=2):
+    """Split text into <=maxlines lines minimising the widest line.
+    Breaks allowed at spaces and right after , ; : characters."""
+    frags = []
+    for word in text.split():
+        buf = ""
+        for i, ch in enumerate(word):
+            buf += ch
+            if ch in ",;:" and i < len(word) - 1:
+                # break point inside a word (e.g. a thousands comma in
+                # "1,484"): the fragment carries NO trailing space, so
+                # rejoining never prints "1, 484"
+                frags.append(buf)
+                buf = ""
+        if buf:
+            frags.append(buf + " ")
+    frags = [f_ for f_ in frags]
+    n = len(frags)
+    best = None
+    # try all single split points (2 lines), plus the 1-line case
+    for s in range(0, n + 1):
+        l1 = "".join(frags[:s]).strip()
+        l2 = "".join(frags[s:]).strip()
+        lines = [l for l in (l1, l2) if l]
+        if not lines:
+            continue
+        if l1.rstrip().endswith(",") and l2[:1].isdigit():
+            continue  # do not split a number at its thousands comma
+        widest = max(tw(draw, l, fnt) for l in lines)
+        if best is None or widest < best[0]:
+            best = (widest, lines)
+    assert best and best[0] <= maxw, f"balanced wrap too wide ({best[0]:.0f}>{maxw}): {text}"
+    return best[1]
+
+
+def draw_squeezed(img, x, y, text, fnt, maxw, fill):
+    """Draw one line; if it exceeds maxw, squeeze horizontally only
+    (glyph height unchanged), capped at 12%."""
+    d0 = ImageDraw.Draw(img)
+    wdt = tw(d0, text, fnt)
+    if wdt <= maxw:
+        d0.text((x, y), text, font=fnt, fill=fill)
+        return
+    factor = maxw / wdt
+    assert factor >= 0.88, f"squeeze too deep ({factor:.2f}): {text}"
+    layer = Image.new("RGBA", (int(wdt) + 4, fnt.size + 16), (0, 0, 0, 0))
+    ImageDraw.Draw(layer).text((2, 2), text, font=fnt, fill=fill + (255,))
+    layer = layer.resize((int(maxw), fnt.size + 16), Image.LANCZOS)
+    img.paste(layer, (int(x), int(y - 2)), layer)
+
+
+# ---------------------------------------------------------------- panels
+def rich_panel(w, h, c_top, c_bot, seed):
+    """Layered multi-frequency gradient + deterministic per-channel grain,
+    soft glow and vignette. Returns an RGB PIL image (no strips drawn)."""
     rng = np.random.RandomState(seed)
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
-    t = 0.72 * (yy / max(h - 1, 1)) + 0.28 * (xx / max(w - 1, 1))
-    t += 0.07 * np.sin(xx * 0.11 + seed * 1.7) * np.cos(yy * 0.13 + seed)
-    # radial glow upper-left
-    d = np.sqrt(((xx - w * 0.28) / max(w, 1)) ** 2 + ((yy - h * 0.18) / max(h, 1)) ** 2)
-    glow = np.clip(1.0 - d, 0, 1) * 26.0
-    arr = np.zeros((h, w, 3), np.float64)
-    ct, cm, cb = (np.array(c, np.float64) for c in (c_top, c_mid, c_bot))
-    lo = t < 0.5
+    t = yy / max(h - 1, 1)
+    base = np.zeros((h, w, 3))
     for ch in range(3):
-        a = np.where(lo, ct[ch] + (cm[ch] - ct[ch]) * (t * 2),
-                     cm[ch] + (cb[ch] - cm[ch]) * ((t - 0.5) * 2))
-        # multi-frequency colour field, phase/frequency differ per channel
-        field = (9.0 * np.sin(xx * (0.16 + 0.03 * ch) + seed * 2.1 + ch * 1.7)
-                 * np.cos(yy * (0.19 - 0.02 * ch) + seed + ch * 0.9)
-                 + 6.0 * np.sin((xx + yy) * (0.07 + 0.013 * ch) + ch * 2.3 + seed))
-        arr[:, :, ch] = a + glow + field
-    noise = rng.randint(-grain, grain + 1, size=(h, w, 3))
-    arr += noise
-    # soft vignette
-    vx = 1.0 - 0.10 * ((xx / max(w - 1, 1) - 0.5) ** 2 + (yy / max(h - 1, 1) - 0.5) ** 2) * 2
-    arr *= vx[:, :, None]
+        base[:, :, ch] = c_top[ch] * (1 - t) + c_bot[ch] * t
+    # multi-frequency sinusoidal light field (different phase per channel)
+    for ch in range(3):
+        f1 = 2.0 + (seed % 5) + ch * 0.7
+        f2 = 5.0 + (seed % 3) * 1.3 + ch * 0.9
+        ph = rng.uniform(0, 6.28)
+        wave = (np.sin(xx / w * f1 * 3.14 + ph) * 0.5
+                + np.sin(yy / h * f2 * 3.14 + ph * 1.7) * 0.35
+                + np.sin((xx + yy) / (w + h) * 9.0 + ph) * 0.25)
+        base[:, :, ch] += wave * 16.0
+    # glow: bright radial blob, seeded position
+    gx, gy = rng.uniform(0.25, 0.75) * w, rng.uniform(0.2, 0.6) * h
+    d2 = ((xx - gx) ** 2 + (yy - gy) ** 2) / (0.55 * w) ** 2
+    base += np.exp(-d2)[:, :, None] * np.array([26.0, 22.0, 14.0])
+    # vignette
+    cx, cy = w / 2.0, h / 2.0
+    vd = np.sqrt(((xx - cx) / (0.75 * w)) ** 2 + ((yy - cy) / (0.75 * h)) ** 2)
+    base *= (1.0 - 0.20 * np.clip(vd - 0.55, 0, 1))[:, :, None]
+    # deterministic per-channel grain, fixed seed
+    for ch in range(3):
+        base[:, :, ch] += rng.normal(0, 3.6, (h, w))
+    return Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), "RGB")
+
+
+def card_fill(w, h, tint, seed):
+    """Pastel gradient wash + fine grain for a card background."""
+    rng = np.random.RandomState(seed + 5000)
+    yy = np.linspace(0, 1, h)[:, None]
+    top = np.array(tint, float)
+    bot = top * 0.90 + np.array([6.0, 4.0, 0.0])
+    arr = top[None, None, :] * (1 - yy[:, :, None]) + bot[None, None, :] * yy[:, :, None]
+    arr = np.repeat(arr, w, axis=1)
+    for ch in range(3):
+        arr[:, :, ch] += rng.normal(0, 1.4, (h, w))
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
 
-PALETTES = {
-    "kospi":    ((38, 62, 120), (24, 38, 84), (10, 16, 40)),
-    "cricket":  ((34, 110, 62), (22, 84, 48), (10, 48, 28)),
-    "rescue":   ((112, 96, 84), (76, 64, 56), (38, 32, 28)),
-    "pmi":      ((84, 96, 116), (54, 66, 88), (26, 34, 50)),
-    "retail":   ((196, 92, 60), (164, 62, 48), (110, 36, 32)),
-    "poll":     ((70, 92, 140), (46, 64, 104), (22, 34, 62)),
-    "bitcoin":  ((96, 74, 20), (66, 52, 14), (34, 27, 8)),
-    "nhs":      ((196, 120, 156), (158, 82, 122), (104, 48, 84)),
-    "hangseng": ((28, 104, 116), (18, 74, 92), (8, 40, 58)),
-    "robot":    ((88, 84, 96), (56, 54, 68), (28, 27, 38)),
-    "music":    ((74, 40, 110), (48, 26, 78), (22, 12, 40)),
-}
 
-# ---------- scenes (drawn only inside the scene rect) ----------
-def scene_layer(w, h, kind, seed):
-    lay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    d = ImageDraw.Draw(lay)
-    rng = np.random.RandomState(seed + 77)
-    if kind == "kospi":
-        base = h - 4
-        for i, bw in enumerate([10, 14, 8, 16, 11, 13, 9, 15]):
-            x = 4 + i * (w // 8)
-            bh = int(h * (0.34 + 0.3 * ((i * 37) % 10) / 10.0))
-            d.rectangle([x, base - bh, x + bw - 2, base], fill=(8, 12, 30, 235))
-            for wy in range(base - bh + 3, base - 3, 5):
-                for wx in range(x + 2, x + bw - 3, 4):
-                    if (wx * 7 + wy * 13) % 5 < 2:
-                        d.point((wx, wy), fill=(255, 214, 120, 255))
-        pts = [(2, int(h * 0.22)), (int(w * 0.3), int(h * 0.34)),
-               (int(w * 0.55), int(h * 0.30)), (int(w * 0.8), int(h * 0.62)),
-               (w - 3, int(h * 0.78))]
-        d.line(pts, fill=(255, 70, 60, 255), width=3)
-        d.polygon([(w - 12, int(h * 0.78)), (w - 3, int(h * 0.78)),
-                   (w - 4, int(h * 0.66))], fill=(255, 70, 60, 255))
-    elif kind == "cricket":
-        d.arc([-w * 0.2, h * 0.35, w * 1.2, h * 1.5], 180, 360, fill=(230, 240, 220, 220), width=2)
-        for fx in (0.12, 0.88):
-            x = int(w * fx)
-            d.line([x, 4, x, int(h * 0.4)], fill=(240, 240, 230, 255), width=2)
-            for k in range(3):
-                d.ellipse([x - 5 + k * 4, 2, x - 2 + k * 4, 5], fill=(255, 255, 210, 255))
-        d.rectangle([int(w * 0.42), int(h * 0.45), int(w * 0.58), h - 3], fill=(214, 188, 130, 255))
-        d.line([int(w * 0.3), h - 4, int(w * 0.7), h - 4], fill=(255, 255, 255, 200), width=2)
-        d.ellipse([int(w * 0.62), int(h * 0.55), int(w * 0.62) + 5, int(h * 0.55) + 5], fill=(200, 30, 30, 255))
-    elif kind == "rescue":
-        d.polygon([(0, h), (int(w * 0.3), int(h * 0.4)), (int(w * 0.55), h)], fill=(52, 46, 42, 255))
-        d.polygon([(int(w * 0.4), h), (int(w * 0.68), int(h * 0.3)), (w, h)], fill=(64, 56, 50, 255))
-        d.polygon([(int(w * 0.52), 0), (int(w * 0.66), 0), (int(w * 0.6), int(h * 0.55))], fill=(255, 226, 140, 90))
-        cx, cy = int(w * 0.58), int(h * 0.62)
-        d.arc([cx - 9, cy - 8, cx + 9, cy + 10], 180, 360, fill=(255, 140, 30, 255), width=4)
-        d.ellipse([cx - 3, cy + 2, cx + 3, cy + 8], fill=(246, 200, 150, 255))
-        d.line([2, int(h * 0.3), w - 2, int(h * 0.22)], fill=(30, 26, 24, 255), width=3)
-    elif kind == "pmi":
-        base = h - 3
-        d.rectangle([4, int(h * 0.45), int(w * 0.4), base], fill=(16, 22, 36, 240))
-        d.polygon([(4, int(h * 0.45)), (int(w * 0.22), int(h * 0.28)), (int(w * 0.4), int(h * 0.45))], fill=(16, 22, 36, 240))
-        d.rectangle([int(w * 0.1), int(h * 0.12), int(w * 0.16), int(h * 0.3)], fill=(16, 22, 36, 240))
-        cx, cy, r = int(w * 0.68), int(h * 0.62), int(h * 0.42)
-        d.pieslice([cx - r, cy - r, cx + r, cy + r], 180, 360, fill=(238, 232, 210, 255))
-        d.pieslice([cx - r, cy - r, cx + r, cy + r], 180, 235, fill=(214, 60, 50, 255))
-        ang = math.radians(205)
-        d.line([cx, cy, cx + int(r * 0.8 * math.cos(ang)), cy + int(r * 0.8 * math.sin(ang))], fill=(20, 20, 20, 255), width=2)
-    elif kind == "retail":
-        for i in range(8):
-            x = 4 + i * (w // 8)
-            col = (255, 240, 220, 255) if i % 2 == 0 else (150, 30, 30, 255)
-            d.polygon([(x, int(h * 0.3)), (x + w // 8, int(h * 0.3)), (x + w // 16, int(h * 0.46))], fill=col)
-        d.rectangle([int(w * 0.34), int(h * 0.48), int(w * 0.66), h - 4], fill=(250, 246, 238, 255))
-        d.arc([int(w * 0.44), int(h * 0.34), int(w * 0.56), int(h * 0.56)], 180, 360, fill=(60, 40, 30, 255), width=2)
-        d.text((int(w * 0.5), int(h * 0.62)), "%", font=font(COND_B, 16), anchor="mm", fill=(178, 28, 32, 255))
-        for i, cx in enumerate((int(w * 0.16), int(w * 0.84))):
-            d.ellipse([cx - 6, int(h * 0.6), cx + 6, int(h * 0.6) + 12], fill=(240, 190, 60, 255), outline=(150, 110, 20, 255))
-    elif kind == "poll":
-        base = h - 3
-        d.polygon([(int(w * 0.08), int(h * 0.34)), (int(w * 0.5), int(h * 0.1)), (int(w * 0.92), int(h * 0.34))], fill=(228, 222, 204, 255))
+# ---------------------------------------------------------------- scenes
+def scene(draw, key, x, y, w, h):
+    """Simple drawn scene in the panel's middle zone only."""
+    cx, cy = x + w / 2, y + h / 2
+    L = (240, 236, 220)   # light line
+    D = (12, 12, 14)      # dark shape
+    A = (255, 196, 64)    # accent
+    R = (255, 92, 72)
+    if key == "nvidia":  # chip + rising arrow
+        s = min(w, h) * 0.30
+        draw.rectangle([cx - s, cy - s, cx + s, cy + s], outline=L, width=3)
+        for i in range(-1, 2):
+            draw.line([cx + i * s * 0.5, cy - s, cx + i * s * 0.5, cy - s - 7], fill=L, width=2)
+            draw.line([cx + i * s * 0.5, cy + s, cx + i * s * 0.5, cy + s + 7], fill=L, width=2)
+        draw.line([x + 6, y + h - 8, x + w - 14, y + 8], fill=A, width=3)
+        draw.polygon([(x + w - 14, y + 8), (x + w - 24, y + 10), (x + w - 16, y + 18)], fill=A)
+    elif key in ("kospi", "sensex", "taiex"):  # chart line
+        col = R if key != "taiex" else (96, 255, 150)
+        pts = []
+        n = 7
+        for i in range(n):
+            px = x + 6 + (w - 12) * i / (n - 1)
+            frac = i / (n - 1)
+            py = y + h * (0.25 + 0.55 * frac) if key != "taiex" else y + h * (0.80 - 0.55 * frac)
+            if key == "taiex":
+                py = y + h * (0.80 - 0.55 * frac)
+            pts.append((px, py + (4 if i % 2 else -3)))
+        draw.line(pts, fill=col, width=3)
+        for i in range(0, int(w), 14):
+            draw.line([x + i, y + h - 4, x + i, y + h - 1], fill=L, width=1)
+    elif key == "dymer":  # building + rescue beam
+        draw.rectangle([x + 8, y + 4, x + 34, y + h - 4], outline=L, width=2)
+        for r in range(3):
+            for c in range(2):
+                draw.rectangle([x + 13 + c * 10, y + 9 + r * 10, x + 19 + c * 10, y + 15 + r * 10], fill=A)
+        draw.polygon([(x + w - 8, y + h - 6), (x + 30, y + 12), (x + 44, y + 10)], fill=(255, 240, 180))
+        draw.ellipse([x + w - 16, y + h - 12, x + w - 4, y + h - 2], fill=A)
+    elif key == "cikande":  # flames
+        for i, fx in enumerate(np.linspace(x + 10, x + w - 10, 4)):
+            fh = h * (0.55 + 0.25 * math.sin(i * 1.7))
+            draw.polygon([(fx - 7, y + h - 4), (fx, y + h - fh), (fx + 7, y + h - 4)], fill=R if i % 2 else A)
+        draw.rectangle([x + 4, y + h - 5, x + w - 4, y + h - 2], fill=D)
+    elif key == "wellington":  # stadium + ball
+        draw.arc([x + 6, y + 6, x + w - 6, y + h + 16], 180, 360, fill=L, width=3)
         for i in range(5):
-            x = int(w * (0.14 + i * 0.17))
-            d.rectangle([x, int(h * 0.36), x + 5, base], fill=(232, 226, 210, 255))
-        d.rectangle([int(w * 0.06), base - 3, int(w * 0.94), base], fill=(200, 192, 168, 255))
-        d.arc([int(w * 0.42), int(h * 0.02), int(w * 0.58), int(h * 0.3)], 180, 360, fill=(240, 236, 220, 255), width=3)
-    elif kind == "bitcoin":
-        pts = [(2, int(h * 0.6)), (int(w * 0.3), int(h * 0.48)), (int(w * 0.55), int(h * 0.56)), (w - 2, int(h * 0.2))]
-        d.line(pts, fill=(90, 220, 130, 200), width=2)
-        cx, cy, r = int(w * 0.5), int(h * 0.52), int(min(w, h) * 0.34)
-        for rr, col in [(r, (250, 200, 70, 255)), (int(r * 0.78), (238, 178, 44, 255)), (int(r * 0.6), (250, 200, 70, 255))]:
-            d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=col)
-        d.text((cx, cy), "B", font=font(COND_B, int(r * 1.05)), anchor="mm", fill=(120, 82, 10, 255))
-    elif kind == "nhs":
-        cx, cy = int(w * 0.34), int(h * 0.52)
-        for rr, col in [(16, (255, 220, 236, 255)), (11, (244, 160, 196, 255)), (6, (214, 80, 140, 255))]:
-            d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=col)
-        gx = int(w * 0.68)
-        d.rectangle([gx - 10, int(h * 0.18), gx + 10, h - 4], outline=(240, 240, 246, 255), width=2)
+            lx = x + 12 + i * (w - 24) / 4
+            draw.line([lx, y + 12, lx, y + 5], fill=A, width=2)
+            draw.ellipse([lx - 2, y + 2, lx + 2, y + 6], fill=A)
+        draw.ellipse([cx - 4, cy + 2, cx + 4, cy + 10], fill=(250, 250, 250))
+    elif key == "benghazi":  # ship + drone arcs
+        draw.polygon([(x + 8, y + h - 12), (x + w - 14, y + h - 12), (x + w - 24, y + h - 4), (x + 16, y + h - 4)], fill=D)
+        draw.rectangle([x + 24, y + h - 22, x + 44, y + h - 12], fill=D)
+        draw.line([x + 34, y + h - 22, x + 34, y + h - 30], fill=L, width=2)
+        for i in range(3):
+            draw.arc([x + w - 34 + i * 3, y + 4 + i * 5, x + w - 6 + i * 3, y + 18 + i * 5], 200, 320, fill=A, width=2)
+        draw.line([x + 4, y + h - 2, x + w - 4, y + h - 2], fill=(120, 190, 255), width=2)
+    elif key == "nepal":  # peaks + sun
+        draw.polygon([(x + 4, y + h - 4), (x + w * 0.38, y + 8), (x + w * 0.62, y + h - 4)], outline=L, width=3)
+        draw.polygon([(x + w * 0.42, y + h - 4), (x + w * 0.72, y + 16), (x + w - 4, y + h - 4)], outline=L, width=3)
+        draw.ellipse([x + w - 22, y + 4, x + w - 10, y + 16], fill=A)
+    elif key == "pmi":  # gauge
+        draw.arc([x + 8, y + 4, x + w - 8, y + h + 10], 180, 360, fill=L, width=3)
+        ang = math.radians(200)
+        draw.line([cx, cy + 8, cx + 16 * math.cos(ang), cy + 8 + 16 * math.sin(ang)], fill=R, width=3)
+        draw.ellipse([cx - 3, cy + 5, cx + 3, cy + 11], fill=A)
+        for i in range(5):
+            a = math.radians(180 + i * 45)
+            draw.line([cx + 20 * math.cos(a), cy + 8 + 20 * math.sin(a), cx + 24 * math.cos(a), cy + 8 + 24 * math.sin(a)], fill=L, width=2)
+    elif key == "cop":  # globe + thermometer
+        r = min(w, h) * 0.32
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(140, 220, 255), width=3)
+        draw.arc([cx - r, cy - r, cx + r, cy + r], 20, 160, fill=(140, 220, 255), width=2)
+        draw.line([cx - r, cy, cx + r, cy], fill=(140, 220, 255), width=2)
+        draw.rectangle([x + w - 14, y + 8, x + w - 8, y + h - 14], outline=R, width=2)
+        draw.rectangle([x + w - 13, y + h - 22, x + w - 9, y + h - 15], fill=R)
+    elif key == "burnham":  # parliament columns
         for i in range(4):
-            y = int(h * (0.28 + i * 0.16))
-            d.line([gx - 7, y, gx + 7, y], fill=(200, 235, 255, 220), width=2)
-        d.line([int(w * 0.52), cy, gx - 12, cy], fill=(255, 255, 255, 180), width=1)
-    elif kind == "hangseng":
-        base = h - 3
-        for i, bw in enumerate([9, 15, 7, 18, 10, 12]):
-            x = 3 + i * (w // 6)
-            bh = int(h * (0.4 + 0.32 * ((i * 53) % 9) / 9.0))
-            d.rectangle([x, base - bh, x + bw - 2, base], fill=(6, 30, 40, 235))
-            for wy in range(base - bh + 3, base - 3, 5):
-                for wx in range(x + 1, x + bw - 3, 4):
-                    if (wx * 3 + wy * 7) % 4 < 2:
-                        d.point((wx, wy), fill=(160, 240, 255, 255))
-        pts = [(2, int(h * 0.18)), (int(w * 0.35), int(h * 0.3)), (int(w * 0.62), int(h * 0.26)), (w - 3, int(h * 0.5))]
-        d.line(pts, fill=(255, 96, 80, 255), width=3)
-    elif kind == "robot":
-        base = h - 3
-        d.rectangle([int(w * 0.08), int(h * 0.55), int(w * 0.2), base], fill=(30, 30, 40, 255))
-        d.line([int(w * 0.14), int(h * 0.55), int(w * 0.4), int(h * 0.22)], fill=(255, 150, 40, 255), width=5)
-        d.line([int(w * 0.4), int(h * 0.22), int(w * 0.66), int(h * 0.44)], fill=(255, 150, 40, 255), width=5)
-        d.line([int(w * 0.66), int(h * 0.44), int(w * 0.66), int(h * 0.62)], fill=(200, 200, 210, 255), width=3)
-        d.ellipse([int(w * 0.1), int(h * 0.5), int(w * 0.18), int(h * 0.5) + 8], fill=(90, 90, 105, 255))
-        d.ellipse([int(w * 0.36), int(h * 0.17), int(w * 0.44), int(h * 0.17) + 8], fill=(90, 90, 105, 255))
-        d.rectangle([int(w * 0.56), int(h * 0.66), int(w * 0.78), base], outline=(220, 220, 230, 255), width=2)
-        for sx in (int(w * 0.84), int(w * 0.9)):
-            d.point((sx, int(h * 0.3)), fill=(120, 255, 160, 255))
-    elif kind == "music":
-        for fx in (0.22, 0.78):
-            d.polygon([(int(w * fx), 0), (int(w * fx) - 12, h - 2), (int(w * fx) + 12, h - 2)], fill=(255, 240, 180, 46))
-        mx, my = int(w * 0.5), int(h * 0.34)
-        d.line([mx, my, mx, h - 4], fill=(210, 210, 220, 255), width=2)
-        d.ellipse([mx - 5, my - 9, mx + 5, my + 3], fill=(30, 30, 36, 255), outline=(200, 200, 210, 255))
-        d.text((int(w * 0.3), int(h * 0.6)), "♪", font=font(COND_B, 18), anchor="mm", fill=(255, 210, 240, 255))
-        d.text((int(w * 0.7), int(h * 0.5)), "♪", font=font(COND_B, 14), anchor="mm", fill=(190, 220, 255, 255))
-    return lay
+            bx = x + 8 + i * (w - 16) / 3
+            draw.rectangle([bx - 3, y + 12, bx + 3, y + h - 10], fill=L)
+        draw.polygon([(x + 4, y + 12), (cx, y + 3), (x + w - 4, y + 12)], fill=A)
+        draw.rectangle([x + 4, y + h - 9, x + w - 4, y + h - 5], fill=L)
+    elif key == "drones":  # drone silhouettes
+        for (dx, dy, s) in [(0.3, 0.35, 9), (0.62, 0.55, 12), (0.45, 0.75, 7)]:
+            px, py = x + w * dx, y + h * dy
+            draw.ellipse([px - 3, py - 3, px + 3, py + 3], fill=D)
+            for (ox, oy) in [(-s, -s), (s, -s), (-s, s), (s, s)]:
+                draw.line([px, py, px + ox, py + oy], fill=D, width=2)
+                draw.ellipse([px + ox - 2, py + oy - 2, px + ox + 2, py + oy + 2], outline=L, width=1)
+    else:  # generic bars
+        for i in range(4):
+            bh = h * (0.25 + 0.15 * i)
+            draw.rectangle([x + 8 + i * 14, y + h - 6 - bh, x + 18 + i * 14, y + h - 6], fill=A if i % 2 else L)
 
-def make_panel(w, h, card, seed):
-    pal = PALETTES[card["kind"]]
-    img = gradient_panel(w, h, pal[0], pal[1], pal[2], seed)
+
+PALETTES = {
+    "nvidia": ((24, 60, 30), (10, 22, 40)),
+    "kospi": ((52, 26, 60), (16, 14, 44)),
+    "dymer": ((58, 44, 30), (24, 20, 34)),
+    "cikande": ((70, 30, 16), (30, 12, 20)),
+    "wellington": ((16, 52, 66), (8, 24, 44)),
+    "benghazi": ((14, 44, 74), (8, 18, 40)),
+    "nepal": ((30, 52, 84), (16, 26, 52)),
+    "pmi": ((54, 48, 22), (26, 24, 16)),
+    "cop": ((18, 56, 62), (10, 30, 44)),
+    "burnham": ((44, 36, 64), (20, 16, 40)),
+    "sensex": ((62, 30, 34), (26, 14, 30)),
+    "drones": ((40, 40, 48), (16, 16, 26)),
+    "taiex": ((18, 58, 44), (10, 28, 34)),
+}
+TINTS = [(238, 233, 214), (232, 236, 218), (236, 230, 222), (230, 234, 226),
+         (238, 236, 208), (226, 234, 232), (234, 232, 216), (238, 230, 210),
+         (228, 236, 224), (234, 230, 226), (236, 226, 216), (230, 232, 230),
+         (226, 236, 220)]
+
+
+def draw_panel(img, card, x, y, w, h, seed):
+    top, bot = PALETTES[card["key"]]
+    panel = rich_panel(w, h, top, bot, seed)
+    img.paste(panel, (x, y))
     d = ImageDraw.Draw(img)
-    ban_h, src_h = 16, 14
-    # scene, clipped to the middle zone so it can never touch the tags
-    scene = scene_layer(w, h - ban_h - src_h, card["kind"], seed)
-    img.paste(scene, (0, ban_h), scene)
-    d = ImageDraw.Draw(img)
-    d.rectangle([0, 0, w, ban_h], fill=(12, 12, 14))
-    bf = font(COND_B, 12)
-    if bf.getlength(card["banner"]) > w - 4:
-        bf = font(EXTRA_B, 11)
-    if bf.getlength(card["banner"]) > w - 4:
-        bf = font(EXTRA_B, 10)
-    d.text((w // 2, ban_h // 2), card["banner"], font=bf, anchor="mm", fill=(255, 246, 220))
-    d.rectangle([0, h - src_h, w, h], fill=(246, 240, 222))
-    d.text((w // 2, h - src_h // 2), card["source"], font=font(COND, 11), anchor="mm", fill=(52, 44, 32))
-    d.rectangle([0, 0, w - 1, h - 1], outline=(30, 26, 20), width=1)
-    return img
-
-
-# ---------- page ----------
-def build():
-    data = json.load(open(os.path.join(HERE, "data.json")))
-    # cream background: smooth vertical gradient + gentle sinusoidal shading
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float64)
-    t = yy / (H - 1)
-    arr = np.zeros((H, W, 3), np.float64)
-    for ch in range(3):
-        shade = (1.6 * np.sin(xx * (0.011 + 0.0016 * ch) + yy * 0.004 + ch * 1.4)
-                 + 1.1 * np.cos(yy * (0.016 - 0.001 * ch) + xx * 0.002 + ch * 0.7))
-        arr[:, :, ch] = CREAM_TOP[ch] + (CREAM_BOT[ch] - CREAM_TOP[ch]) * t + shade
-    img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
-    d = ImageDraw.Draw(img)
-    M = 16
-    CW = W - 2 * M
-
-    # strap
-    d.text((W // 2, 6), data["strap"], font=font(COND_B, 20), anchor="ma", fill=RED)
-    d.line([M, 32, W - M, 32], fill=INK, width=2)
-
-    # giant date: serif condensed bold at 106px, rendered then squeezed
-    # horizontally (only) so the full line fits the measure at that size.
-    DATE_SIZE = 106
-    fdate = font(SERIF_CB, DATE_SIZE)
-    tw = int(fdate.getlength(data["date_line"]))
-    layer = Image.new("RGBA", (tw + 8, DATE_SIZE + 8), (0, 0, 0, 0))
-    ImageDraw.Draw(layer).text((4, 0), data["date_line"], font=fdate, fill=INK + (255,))
-    layer = layer.resize((CW, DATE_SIZE + 8), Image.LANCZOS)
-    img.paste(layer, (M, 36), layer)
-    d = ImageDraw.Draw(img)
-    date_bottom = 36 + DATE_SIZE + 8
-    d.line([M, date_bottom, W - M, date_bottom], fill=INK, width=2)
-
-    # stat band: navy horizontal gradient
-    sy = date_bottom + 4
-    band = gradient_panel(CW, 42, (26, 58, 110), (18, 42, 84), (12, 30, 62), 999, grain=4)
-    img.paste(band, (M, sy))
-    d = ImageDraw.Draw(img)
-    colw = CW // 4
-    for i, s in enumerate(data["stats"]):
-        x = M + i * colw + 8
-        d.text((x, sy + 4), s["k"], font=font(COND_B, 14), anchor="la", fill=(170, 200, 245))
-        d.text((x, sy + 17), s["v"], font=font(COND_B, 24), anchor="la", fill=(255, 255, 255))
-        sx = x + int(font(COND_B, 24).getlength(s["v"])) + 8
-        d.text((sx, sy + 23), s["s"], font=font(COND, 13), anchor="la", fill=(214, 226, 246))
-        if i:
-            d.line([M + i * colw, sy + 4, M + i * colw, sy + 40], fill=(140, 170, 220), width=1)
-    ry = sy + 46
-    d.text((W // 2, ry), data["region"], font=font(COND_B, 17), anchor="ma", fill=NAVY)
-
-    # cards
-    cards = data["cards"]
-    y = ry + 22
-    gap = 6
-    def draw_card(card, x, y, w, h, lead):
-        d.rounded_rectangle([x, y, x + w, y + h], 6, fill=CARD_BG, outline=CARD_LINE, width=1)
-        aw = 168 if lead else 88
-        ah = 88 if lead else 68
-        panel = make_panel(aw, ah, card, seed=1000 + card["n"] * 131)
-        img.paste(panel, (x + 6, y + 6))
-        tx = x + 12 + aw
-        twd = x + w - 8 - tx
-        hsize = 40 if lead else 36
-        hf, hl = fit_lines(card["headline"], int(twd / 0.90), hsize, 2)
-        lead_h = 42 if lead else 37
-        maxw_line = max(hf.getlength(ln) for ln in hl) if hl else 0
-        if maxw_line <= twd:
-            for j, ln in enumerate(hl):
-                d.text((tx, y + 5 + j * lead_h), ln, font=hf, anchor="la", fill=INK)
+    strip = 14
+    d.rectangle([x, y, x + w, y + strip], fill=(10, 10, 12))
+    d.rectangle([x, y + h - strip, x + w, y + h], fill=(10, 10, 12))
+    # Strip text fit-to-width: shrink the tag font (13px down to 11px)
+    # until it fits inside the strip's inner width (panel width minus
+    # 4px padding each side); if it still overflows, squeeze it
+    # horizontally into the available width. No tag may spill outside
+    # its strip (ESPNCRICINFO / BUSINESSLINE / UA AIR FORCE did).
+    def strip_text(text, tx, ty, align, fill):
+        avail = w - 8
+        size = 13
+        while size > 11:
+            f_try = font(F_CB, size)
+            if tw(d, text, f_try) <= avail:
+                break
+            size -= 1
+        f_use = font(F_CB, size)
+        wdt = tw(d, text, f_use)
+        y_off = ty + (13 - size)
+        if wdt <= avail:
+            sx = tx if align == "left" else tx + avail - wdt
+            d.text((sx, y_off), text, font=f_use, fill=fill)
         else:
-            lay = Image.new("RGBA", (int(maxw_line) + 6, lead_h * len(hl) + 8), (0, 0, 0, 0))
-            ld = ImageDraw.Draw(lay)
-            for j, ln in enumerate(hl):
-                ld.text((3, j * lead_h), ln, font=hf, anchor="la", fill=INK + (255,))
-            lay = lay.resize((twd, lay.height), Image.LANCZOS)
-            img.paste(lay, (tx, y + 5), lay)
-        # number chip on the bottom-right corner, clear of headline and body
-        d.ellipse([x + w - 22, y + h - 22, x + w - 2, y + h - 2], fill=RED)
-        d.text((x + w - 12, y + h - 12), str(card["n"]), font=font(COND_B, 13), anchor="mm", fill=(255, 255, 255))
-        bf = font(COND, 17 if lead else 16)
-        bl = wrap(card["body"], bf, w - 16)
-        by = y + 96 if lead else y + 78
-        for j, ln in enumerate(bl[:2]):
-            d.text((x + 8, by + j * 19), ln, font=bf, anchor="la", fill=(52, 48, 40))
-    # leads row
-    lw = (CW - gap) // 2
-    draw_card(cards[0], M, y, lw, 134, True)
-    draw_card(cards[1], M + lw + gap, y, lw, 134, True)
-    y += 134 + gap
-    sw = (CW - 2 * gap) // 3
-    for r in range(3):
-        for c in range(3):
-            draw_card(cards[2 + r * 3 + c], M + c * (sw + gap), y, sw, 116, False)
-        y += 116 + gap
+            # squeezed to exactly the available width, starting at the
+            # strip's left padding edge
+            draw_squeezed(img, tx, y_off, text, f_use, avail, fill)
+
+    strip_text(card["place"], x + 4, y + 1, "left", (255, 244, 200))
+    d = ImageDraw.Draw(img)
+    strip_text(card["source"], x + 4, y + h - strip + 1, "right", (210, 214, 220))
+    d = ImageDraw.Draw(img)
+    scene(d, card["key"], x, y + strip, w, h - 2 * strip)
+
+
+def main():
+    data = json.load(open(os.path.join(HERE, "data.json")))
+    img = Image.new("RGB", (W, H), CREAM)
+    d = ImageDraw.Draw(img)
+
+    # ---- masthead
+    fm = font(F_B, 24)
+    d.text((M, 10), data["masthead_left"], font=fm, fill=INK)
+    r = data["masthead_right"]
+    d.text((W - M - tw(d, r, fm), 10), r, font=fm, fill=INK)
+    d.rectangle([M, 40, W - M, 43], fill=INK)
+
+    # ---- giant date: 106px nominal, squeezed horizontally only to fit
+    # the measure (glyph ink height unchanged by an x-only squeeze)
+    date_size = 106
+    fd = font(F_DATE, date_size)
+    txt = data["date_line"]
+    wdt = tw(d, txt, fd)
+    layer = Image.new("RGBA", (int(wdt) + 8, 136), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    ld.text((4, 9), txt, font=fd, fill=INK + (255,))
+    if wdt > CW:
+        layer = layer.resize((CW, 136), Image.LANCZOS)
+    img.paste(layer, (M, 2), layer)
+    d = ImageDraw.Draw(img)
+    DATE_NOMINAL = date_size
+
+    # ---- strap
+    fs = font(F_CB, 24)
+    st = data["strap"]
+    d.text(((W - tw(d, st, fs)) / 2, 148), st, font=fs, fill=(90, 30, 20))
+
+    # ---- stat band
+    d.rectangle([M, 176, W - M, 214], fill=NAVY)
+    fst = font(F_CB, 24)
+    for i, s in enumerate(data["stats"]):
+        assert tw(d, s, fst) <= CW / 4 - 10, f"stat too wide: {s}"
+        cx0 = M + i * CW / 4
+        d.text((cx0 + (CW / 4 - tw(d, s, fst)) / 2, 183), s, font=fst, fill=(255, 246, 214))
+        if i:
+            d.line([cx0, 182, cx0, 208], fill=(120, 140, 180), width=2)
+
+    # ---- region strip
+    d.rectangle([M, 218, W - M, 244], fill=(238, 230, 204))
+    fr = font(F_C, 24)
+    rg = data["region_strip"]
+    assert tw(d, rg, fr) <= CW, "region strip too wide"
+    d.text(((W - tw(d, rg, fr)) / 2, 219), rg, font=fr, fill=INK)
+
+    # ---- cards
+    cards = data["cards"]
+    y = 252
+    # lead row: 2 cards
+    lead_h, gap = 106, 5
+    lw = (CW - 8) / 2
+    for i in range(2):
+        cx0 = M + i * (lw + 8)
+        img.paste(card_fill(int(lw), lead_h, TINTS[i], 100 + i), (int(cx0), y))
+        pw = 120
+        draw_panel(img, cards[i], int(cx0), y, pw, lead_h, 200 + i * 7)
+        fh = font(F_XCB, 40)
+        lines = wrap_balanced(d, cards[i]["headline"], fh, (lw - pw - 14) * 1.13, 2)
+        ty = y + 4
+        for ln in lines:
+            draw_squeezed(img, cx0 + pw + 8, ty, ln, fh, lw - pw - 14, INK)
+            ty += 38
+        d = ImageDraw.Draw(img)
+        ff = font(F_C, 24)
+        flines = wrap(d, cards[i]["fact"], ff, lw - pw - 14, 1)
+        for ln in flines:
+            d.text((cx0 + pw + 8, ty + 1), ln, font=ff, fill=(60, 40, 20))
+            ty += 25
+        assert ty <= y + lead_h + 2, f"lead overflow card {i}"
+    y += lead_h + gap
+    # rows of 3,3,3,2
+    row_h = 66
+    cw3 = (CW - 12) / 3
+    idx = 2
+    fh36 = font(F_XCB, 36)
+    for row in range(4):
+        n_in = 3 if row < 3 else 2
+        for c in range(n_in):
+            card = cards[idx]
+            cx0 = M + c * (cw3 + 6)
+            img.paste(card_fill(int(cw3), row_h, TINTS[idx], 100 + idx), (int(cx0), y))
+            pw = 76
+            draw_panel(img, card, int(cx0), y, pw, row_h, 200 + idx * 7)
+            lines = wrap_balanced(d, card["headline"], fh36, (cw3 - pw - 12) * 1.13, 2)
+            ty = y + (row_h - len(lines) * 33) / 2 - 1
+            for ln in lines:
+                draw_squeezed(img, cx0 + pw + 7, ty, ln, fh36, cw3 - pw - 12, INK)
+                ty += 33
+            d = ImageDraw.Draw(img)
+            idx += 1
+        y += row_h + gap
     cards_bottom = y - gap
 
-    # briefs band
-    by0 = cards_bottom + 4
-    d.rectangle([M, by0, W - M, by0 + 62], fill=(238, 230, 208), outline=CARD_LINE)
-    d.text((M + 8, by0 + 3), "BRIEFS - MONDAY, PLACE-LED, SOURCED", font=font(COND_B, 13), anchor="la", fill=RED)
-    bf = font(COND, 14)
-    for i, b in enumerate(data["briefs"]):
-        d.text((M + 8, by0 + 18 + i * 15), b, font=bf, anchor="la", fill=(52, 48, 40))
+    # ---- briefs band
+    y = cards_bottom + 8
+    fb_h = font(F_B, 24)
+    d.text((M, y), data["briefs_heading"], font=fb_h, fill=INK)
+    d.rectangle([M, y + 28, W - M, y + 30], fill=INK)
+    y += 36
+    fb = font(F_C, 24)
+    colw = (CW - 16) / 2
+    briefs = data["briefs"]
+    per = (len(briefs) + 1) // 2
+    for col in range(2):
+        cx0 = M + col * (colw + 16)
+        for j in range(per):
+            k = col * per + j
+            if k >= len(briefs):
+                break
+            line = f"{k + 1}. {briefs[k]}"
+            assert tw(d, line, fb) <= colw, f"brief too wide: {line}"
+            d.text((cx0, y + j * 24), line, font=fb, fill=INK)
+    y += per * 24 + 6
 
-    # DATE CHECK box
-    dy = by0 + 66
-    d.rectangle([M, dy, W - M, dy + 28], fill=RED)
-    d.text((W // 2, dy + 14), data["datecheck_heading"], font=font(COND_B, 24), anchor="mm", fill=(255, 255, 255))
-    iy = dy + 32
-    d.rectangle([M, iy, W - M, iy + 150], fill=(250, 246, 234), outline=RED, width=2)
-    df = font(COND, 24)
-    dfl = font(COND_B, 24)
-    col_w = (CW - 24) // 2
-    for i, item in enumerate(data["datecheck"]):
-        cx = M + 10 + (i % 2) * (col_w + 8)
-        cy = iy + 4 + (i // 2) * 49
-        day = item["day"] + "  "
-        dw = dfl.getlength(day)
-        d.text((cx, cy), day, font=dfl, anchor="la", fill=RED)
-        ls = wrap(item["text"], df, col_w - dw)
-        # if the remainder needs a second line it continues full-width below
-        first = ls[0] if ls else ""
-        d.text((cx + dw, cy), first, font=df, anchor="la", fill=INK)
-        rest = " ".join(ls[1:])
-        if rest:
-            ls2 = wrap(rest, df, col_w)
-            d.text((cx, cy + 24), ls2[0], font=df, anchor="la", fill=INK)
-
-    # not-yet line
-    ny = iy + 154
-    d.rectangle([M, ny, W - M, ny + 24], fill=INK)
-    d.text((W // 2, ny + 12), data["notyet"], font=font(COND_B, 16), anchor="mm", fill=(255, 250, 235))
-    # footer
-    d.text((W // 2, ny + 28), data["footer"], font=font(COND, 13), anchor="ma", fill=(90, 82, 66))
-
+    # ---- DATE CHECK box
+    d.rectangle([M, y, W - M, H - 8], outline=RED, width=3)
+    fdc = font(F_B, 24)
+    d.rectangle([M, y, W - M, y + 28], fill=RED)
+    hd = data["date_check_heading"]
+    d.text(((W - tw(d, hd, fdc)) / 2, y + 2), hd, font=fdc, fill=(255, 255, 255))
+    y += 30
+    fitem = font(F_C, 24)
+    fday = font(F_CB, 24)
+    colw3 = (CW - 24) / 3
+    items = data["date_check"]
+    for r_ in range(2):
+        for c in range(3):
+            it = items[r_ * 3 + c]
+            cx0 = M + 8 + c * (colw3 + 4)
+            day, rest = it.split(" - ", 1)
+            dayw = tw(d, day + " - ", fday)
+            iy = y + r_ * 44
+            d.text((cx0, iy), day + " -", font=fday, fill=RED)
+            # greedy wrap with per-line widths: line 1 sits beside the
+            # red day label, line 2 uses the full column width
+            widths = [colw3 - 6 - dayw, colw3 - 6]
+            lines, cur, li = [], "", 0
+            for w_ in rest.split():
+                t = (cur + " " + w_).strip()
+                if tw(d, t, fitem) <= widths[min(li, 1)] or not cur:
+                    cur = t
+                else:
+                    lines.append(cur)
+                    li += 1
+                    cur = w_
+            if cur:
+                lines.append(cur)
+            assert len(lines) <= 2, f"date-check overflow: {it}"
+            d.text((cx0 + dayw, iy), lines[0], font=fitem, fill=INK)
+            if len(lines) > 1:
+                d.text((cx0, iy + 22), lines[1], font=fitem, fill=INK)
     out = os.path.join(HERE, "entry.png")
-    img.save(out, optimize=False)
-    print(out)
+    img.save(out, optimize=True)
+    print("date nominal:", DATE_NOMINAL)
+    print("saved", out)
+
 
 if __name__ == "__main__":
-    build()
+    main()

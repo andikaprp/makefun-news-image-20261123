@@ -10,25 +10,21 @@ day's world news in a single image.
 
 ## What is in the image
 
-A single-page cream broadsheet of Monday 23 November 2026. The page
-presents **20 items**: **11 headlined cards**, each illustrated with its
-own rich-art panel (layered multi-frequency gradient, deterministic
-grain, soft glow and vignette, plus a drawn scene for its subject;
-banner label and source tag on every panel), plus **3 numbered briefs**
-and a **DATE CHECK box** of 6 verified Saturday/Sunday items, each
-day-labelled so they are not mistaken for Monday's news, and a
-not-yet-reported line naming what had not landed.
+A single-page cream broadsheet of Monday 23 November 2026, built from
+the evening census of 36 verified Monday stories. The page presents
+**35 items**: **13 headlined cards**, each illustrated with its own
+rich-art panel, plus **16 numbered briefs** and a **DATE CHECK box**
+of 6 verified Saturday/Sunday items, each day-labelled so they are
+not mistaken for Monday's news.
 
-The 11 headlined stories: KOSPI falls 4.04% Monday; NZ 190-5 trail 162
-LIVE in the Wellington Test; Dymer: 6 dead, boy 7 rescued; Australia
-flash PMI 46.1; NZ retail sales +2.2%; Albanese trails Taylor in the
-Newspoll; Bitcoin $60,957 Monday; NHS AI trial: 700,000 women; Hang
-Seng opens -1.08%; robot maker Microintelligence revives its Hong Kong
-IPO (Changzhou); and Molly Meldrum dies at 83 in Melbourne.
+Rich art: every one of the 13 cards carries an original code-authored
+panel - layered multi-frequency gradient, deterministic per-channel
+grain, glow and vignette, plus a drawn scene for its subject
+(68,429 unique colours on the page, date at 106px).
 
 Every story on the page happened, or was first reported, on Monday
 23 November 2026 in some time zone. Every figure was checked against
-its primary source before printing.
+its census source before printing.
 
 ## How it runs
 
