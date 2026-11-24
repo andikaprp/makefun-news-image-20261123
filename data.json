@@ -1,134 +1,226 @@
 {
  "briefs": [
-  "Wellington - NZ retail sales +2.2% in Q3",
-  "Sydney - Aus flash PMI 46.1, lowest since 2021",
-  "Global - Bitcoin $60,956.84 at 01:22 UTC Mon",
-  "Melbourne - Molly Meldrum dies at 83, Monday",
-  "Cambridge - EDITH AI trial: 700,000 women",
-  "Hong Kong - Hang Seng -0.12% at 22,383.74",
-  "Singapore - core inflation 1.5% in October",
-  "Sydney - ASX 200 -0.26%, eighth straight fall",
-  "Europe - STOXX 600 +0.73% intraday, 09:33 GMT",
-  "Global - gold +2.4% to $3,616.51 on Monday",
-  "Madrid - Court shelves Puigdemont case",
-  "Dushanbe - Tajikistan begins ICC withdrawal",
-  "Tehran - Iran vows all tools vs US blockade",
-  "Germany - 450 schools get bomb threats",
-  "Hawaii - Kilauea fountains reach 650 feet",
-  "Melbourne - Prespakis AFLW best, 30 votes"
+  "WELLINGTON - NZ-India draw, 239-5",
+  "SINGAPORE - Record 29 China deals",
+  "LONDON - GBP 17bn EU boost",
+  "WELLINGTON - Retail sales +2.2%",
+  "SYDNEY - Flash PMI falls to 46.1",
+  "CANBERRA - Taylor leads poll",
+  "GLOBAL - Bitcoin above $60,000",
+  "MELBOURNE - Meldrum dies, 83",
+  "CAMBRIDGE - AI breast trial, 700,000",
+  "HONG KONG - Hang Seng -0.12%",
+  "SINGAPORE - Core inflation 1.5%",
+  "TAIPEI - Jobless holds at 3.33%",
+  "SYDNEY - ASX 200 -0.26%, 8th fall",
+  "EUROPE - STOXX 600 +1.9% close",
+  "GLOBAL - Gold +2.4%, $3,616.51",
+  "MADRID - Puigdemont case shut",
+  "DUSHANBE - ICC exit begins",
+  "TEHRAN - All tools vs US blockade",
+  "GERMANY - 450 school threats",
+  "SEOUL - Kang named spy chief",
+  "TAIPEI - Taiex +2.16% to 36,811.89",
+  "BRUSSELS - NATO AWACS to Poland",
+  "WASHINGTON - US flash PMI 54.6",
+  "GAZA - Strike kills UNRWA worker"
  ],
- "briefs_heading": "THE DAY IN BRIEF - MONDAY, IN ONE LINE EACH",
  "cards": [
   {
-   "fact": "Shares +33% early; Nasdaq +6%",
-   "headline": "NVIDIA REINSTATES HUANG AS CEO",
-   "key": "nvidia",
-   "place": "NEW YORK",
-   "source": "REUTERS"
+   "headline": "Nvidia +31% as Huang returns as CEO",
+   "kind": "hero",
+   "place": "NEW YORK - REUTERS",
+   "scene": "chip",
+   "sub": "Nasdaq +6.5%, S&P +4.7%, Dow +3%",
+   "label": "+31% CLOSE",
+   "sub2": "Biggest Wall Street day since April 2025"
   },
   {
-   "fact": "At 4,708.54; lowest since Jan",
-   "headline": "KOSPI CLOSES DOWN 3.31%",
-   "key": "kospi",
-   "place": "SEOUL",
-   "source": "KOREA EXCHANGE"
+   "headline": "Russia rules out a new Black Sea grain deal",
+   "kind": "hero",
+   "place": "NEW YORK, UN - UNIFEED",
+   "scene": "grainship",
+   "sub": "Bosphorus grain traffic down 63%",
+   "label": "GRAIN -63%",
+   "sub2": "Council clashed over Ukraine energy attacks"
   },
   {
-   "fact": "",
-   "headline": "DYMER TOLL 11 DEAD, 2 MISSING",
-   "key": "dymer",
-   "place": "DYMER",
-   "source": "REUTERS"
+   "headline": "Russian strike kills 11 in Dymer",
+   "kind": "hero",
+   "place": "DYMER, UKRAINE - REUTERS",
+   "scene": "rubble",
+   "sub": "Flats hit; 2 still missing",
+   "label": "11 DEAD",
+   "sub2": "Boy, 7, and woman, 79, pulled out alive"
   },
   {
-   "fact": "",
-   "headline": "CIKANDE FIRE: 24 DEAD, 30 MISSING",
-   "key": "cikande",
-   "place": "CIKANDE",
-   "source": "REUTERS"
+   "headline": "Candy factory fire toll hits 24",
+   "kind": "grid",
+   "place": "CIKANDE, INDONESIA - REUTERS",
+   "scene": "factory",
+   "sub": "About 30 still missing",
+   "label": "24 DEAD"
   },
   {
-   "fact": "",
-   "headline": "WELLINGTON DRAW: NZ 239-5",
-   "key": "wellington",
-   "place": "WELLINGTON",
-   "source": "ESPNCRICINFO"
+   "headline": "CrowdStrike buys Zscaler $43.9bn",
+   "kind": "grid",
+   "place": "AUSTIN, US - REUTERS",
+   "scene": "shield",
+   "sub": "Zscaler at $260.41/share",
+   "label": "$43.9BN"
   },
   {
-   "fact": "",
-   "headline": "CLAIM: CORVETTE SUNK, 7 DRONES",
-   "key": "benghazi",
-   "place": "BENGHAZI",
-   "source": "REUTERS"
+   "headline": "Ukraine says it sank Russian corvette",
+   "kind": "grid",
+   "place": "BENGHAZI, LIBYA - REUTERS",
+   "scene": "ship",
+   "sub": "7 drones hit Merkury - claim",
+   "label": "7 DRONES"
   },
   {
-   "fact": "",
-   "headline": "INDIA GIVES $1.62BN TO NEPAL",
-   "key": "nepal",
-   "place": "NEW DELHI",
-   "source": "REUTERS"
+   "headline": "US, Mexico to host 2031 Women's World Cup",
+   "kind": "grid",
+   "place": "ZURICH, FIFA - REUTERS",
+   "scene": "trophy",
+   "sub": "Costa Rica, Jamaica join; UK 2035",
+   "label": "2031 HOSTS"
   },
   {
-   "fact": "",
-   "headline": "GERMANY PMI 55.0, FRANCE 46.2",
-   "key": "pmi",
-   "place": "EUROZONE",
-   "source": "S&P GLOBAL"
+   "headline": "Ukraine downs 134 of 153 Russian drones",
+   "kind": "grid",
+   "place": "KYIV - UKRINFORM",
+   "scene": "drones",
+   "sub": "60 jet-powered Shaheds",
+   "label": "134 / 153"
   },
   {
-   "fact": "",
-   "headline": "COP31 BACKLASH: BOWEN MUST GO",
-   "key": "cop",
-   "place": "CANBERRA",
-   "source": "REUTERS"
+   "headline": "KOSPI falls 3.31% to 4,708.54",
+   "kind": "grid",
+   "place": "SEOUL - KOREA EXCHANGE",
+   "scene": "chartdown",
+   "sub": "Intraday plunge hit 5.8%",
+   "label": "4,708.54"
   },
   {
-   "fact": "",
-   "headline": "BURNHAM: GBP 17BN EU BOOST",
-   "key": "burnham",
-   "place": "LONDON",
-   "source": "BBC"
+   "headline": "Sensex plunges 1,484 points",
+   "kind": "grid",
+   "place": "MUMBAI - BUSINESSLINE",
+   "scene": "chartdown2",
+   "sub": "Nifty -1.75% at 25,349.65",
+   "label": "-1,484 PTS"
   },
   {
-   "fact": "",
-   "headline": "SENSEX PLUNGES 1,484 POINTS",
-   "key": "sensex",
-   "place": "MUMBAI",
-   "source": "BUSINESSLINE"
+   "headline": "India gives Nepal $1.62bn aid",
+   "kind": "grid",
+   "place": "NEW DELHI - REUTERS",
+   "scene": "mountains",
+   "sub": "240bn rupees after talks",
+   "label": "$1.62BN"
   },
   {
-   "fact": "",
-   "headline": "153 DRONES; 134 DOWNED",
-   "key": "drones",
-   "place": "KYIV",
-   "source": "UA AIR FORCE"
+   "headline": "Eurozone PMI holds at 51.7",
+   "kind": "grid",
+   "place": "EUROZONE - S&P GLOBAL",
+   "scene": "bars",
+   "sub": "Germany 55.0, France 46.2",
+   "label": "51.7"
   },
   {
-   "fact": "",
-   "headline": "TAIEX +2.16% TO 36,811.89",
-   "key": "taiex",
-   "place": "TAIPEI",
-   "source": "TWSE VIA AP"
+   "headline": "COP31: Bowen faces quit calls",
+   "kind": "grid",
+   "place": "CANBERRA - REUTERS",
+   "scene": "parliament",
+   "sub": "A$150m spent on summit",
+   "label": "A$150M"
+  },
+  {
+   "headline": "Kilauea fountains reach 650 ft",
+   "kind": "grid",
+   "place": "HAWAII - USGS",
+   "scene": "volcano",
+   "sub": "Episode 57 at Halemaumau",
+   "label": "650 FT"
   }
  ],
  "date_check": [
-  "SUN - COP31 ends, no deal: ~200 nations at Antalya",
-  "SUN - Verstappen wins Las Vegas GP, his 75th win",
-  "SUN - Dymer block struck Sun ~05:00 (strike itself)",
-  "SUN - India 720-9 declared, day 4: Rahul 136, Pant 128",
-  "SAT - Cikande fire Sat 17:00; Sun: 7 bags, ~50 missing",
-  "12 NOV - Huang resigned; only his return is Monday"
+  [
+   "SUN",
+   "COP31 summit ends without a deal, Antalya"
+  ],
+  [
+   "SUN",
+   "Verstappen wins Las Vegas Grand Prix"
+  ],
+  [
+   "SUN",
+   "Korea readies $8.0bn stabilisation fund"
+  ],
+  [
+   "SUN DAY 4",
+   "India's record 720-9 at Wellington"
+  ],
+  [
+   "SAT",
+   "Taiwan bans short sales below prior close"
+  ],
+  [
+   "12 NOV",
+   "Jensen Huang resigns as Nvidia CEO"
+  ]
  ],
- "date_check_heading": "DATE CHECK - NOT MONDAY: THE WEEKEND, CORRECTLY LABELLED",
- "date_line": "MONDAY 23 NOVEMBER 2026",
- "masthead_left": "THE WORLD IN ONE PAGE",
- "masthead_right": "ONE DAY - EVERY REGION",
- "region_strip": "ASIA 13 - EUROPE 9 - OCEANIA 7 - GLOBAL 3 - N. AMERICA 2 - AFRICA 1 - MIDEAST 1",
+ "date_day": "MONDAY",
+ "date_rest": "23 NOVEMBER 2026",
  "stats": [
-  "NVIDIA +33% EARLY",
-  "KOSPI 4,708.54",
-  "SENSEX -1,484 PTS",
-  "134 OF 153 DOWNED"
+  [
+   "+31%",
+   "NVIDIA CLOSE"
+  ],
+  [
+   "+6.5%",
+   "NASDAQ CLOSE"
+  ],
+  [
+   "4,708.54",
+   "KOSPI CLOSE -3.31%"
+  ],
+  [
+   "11",
+   "DYMER DEAD, 2 MISSING"
+  ],
+  [
+   "$43.9BN",
+   "CROWDSTRIKE-ZSCALER"
+  ],
+  [
+   "134/153",
+   "DRONES DOWNED"
+  ]
  ],
- "strap": "NVIDIA'S BOARD REVERSES - ASIA MARKETS SPLIT - EUROPE'S PMI DIVERGES"
+ "strap_left": "THE MONDAY WIRE",
+ "timeline": [
+  [
+   "06:00",
+   "KYIV TALLY"
+  ],
+  [
+   "06:30",
+   "KOSPI CLOSE"
+  ],
+  [
+   "08:30",
+   "GERMAN PMI"
+  ],
+  [
+   "10:15",
+   "KILAUEA"
+  ],
+  [
+   "15:00",
+   "UNSC SITS"
+  ],
+  [
+   "21:00",
+   "WALL ST CLOSE"
+  ]
+ ]
 }
